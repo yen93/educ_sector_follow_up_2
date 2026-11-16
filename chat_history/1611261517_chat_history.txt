@@ -1,0 +1,90 @@
+================================================================================
+CHAT HISTORY EXPORT — 2026-11-16
+Session: Build educ-draft-followup-2 and educ-send-followup-2 edge functions (education-sector Follow-up 2 drafting + sending) on Supabase MAGTestProject
+================================================================================
+
+NOTE ON REDACTIONS: A cron.job query result echoed the plaintext PUSH_SHARED_SECRET
+in the URL of existing educ cron commands. That value is replaced below with
+[REDACTED_PUSH_SHARED_SECRET]. No other secrets appeared.
+
+--------------------------------------------------------------------------------
+USER:
+Pointed at prompts/161126_create_followup_2_draft.txt. Spec: to_process =
+manually_found_educ_leads where status = '2B'; email body is
+chase_messages/followup_2.html; [firstname] = manually_found_educ_leads.firstname.
+Create edge function educ-draft-followup-2 that drafts followup_2 in the same
+email thread for each lead, then sets status '3A'. Critical: do NOT run the
+function once created; just report when done.
+
+--------------------------------------------------------------------------------
+ASSISTANT:
+Read the prompt and the HTML template (single [firstname] placeholder, James's
+signature + "book a call" CTA). Found the sibling project
+educ_sector_follow_up_sequence with the existing educ-draft-followup-1 function,
+its CLAUDE.md, and _shared helpers (gmail.ts, google-auth.ts, mime.ts, chase1.ts);
+used them as the pattern. Listed Supabase projects (MAGTestProject
+aivitcomiywiysrfwqxt, n8n-production). Verified schema of
+manually_found_educ_leads (has draft_id, thread_id, followup_1/2/3_date_sent) and
+status counts (43 leads at 2B, 4 at 8A, 3 at 10A), and the educ_router_runs
+columns.
+
+Scaffolded supabase/functions/{educ-draft-followup-2,_shared}. Copied gmail.ts,
+google-auth.ts, mime.ts verbatim. Generated _shared/chase2.ts from the HTML by
+stripping the ephemeral Gmail wrapper (a3s/avWBGd/id=":27") and JSON-encoding the
+body, checking div balance and placeholder survival. Wrote index.ts (drafts only,
+token auth via ?token=PUSH_SHARED_SECRET, ?dry=1, ?limit=n, guarded
+UPDATE ... WHERE status='2B' -> 3A + draft_id, logging to educ_router_runs).
+
+First deploy failed (chase2.ts missing from the bundle); redeployed with all five
+files, verify_jwt=false -> v1 ACTIVE. Not invoked.
+
+--------------------------------------------------------------------------------
+USER:
+"minor update. i changed to_process query." (spec now adds
+created_at <= now() - interval '8 days').
+
+--------------------------------------------------------------------------------
+ASSISTANT:
+Re-read the prompt, added AGED_DAYS = 8, a .lte("created_at", agedBefore) filter,
+and an ?aged_days=<n> override for dry-run testing (mirrors follow-up 1).
+Redeployed -> v2. Not invoked. Noted that the 8-day window will narrow the 43
+2B leads and offered a read-only count.
+
+--------------------------------------------------------------------------------
+USER:
+Pointed at prompts/161126_send_followup_2.txt. Spec: query_drafts = status '3A'
+and created_at <= now() - interval '8 days'; steps per row: (1) send the drafted
+message in the same thread, (2) set status '3B', (3) update followup_2_date_sent.
+Tasks: create educ-send-followup-2; and call it at the very end of
+educ-draft-followup-2 as an additional step. Critical: do not run after updates.
+
+--------------------------------------------------------------------------------
+ASSISTANT:
+Inspected cron.job to see how existing educ functions are invoked (net.http_post
+to /functions/v1/<fn>?token=[REDACTED_PUSH_SHARED_SECRET], Content-Type header
+only, no Authorization). Created educ-send-followup-2/index.ts: selects 3A leads
+aged >= 8 days, drafts.send on stored draft_id (stays in thread), guarded update
+to status '3B' + followup_2_date_sent = now(), skips leads without draft_id,
+leaves failed sends at 3A, logs to educ_router_runs as send-followup-2. Deployed
+(v1, verify_jwt=false) with gmail.ts + google-auth.ts.
+
+Added triggerSend() to educ-draft-followup-2 as its final step (POSTs to
+educ-send-followup-2 with token, dry, aged_days, limit propagated; never throws;
+failure does not fail the draft pass). Also chains the send when no 2B leads are
+found, so leftover 3A leads are flushed. Redeployed -> v3. Synced local index.ts
+and the gmail.ts comment to match deployed code. Neither function was invoked and
+no cron was created. Offered a dry-run command
+(?token=<secret>&dry=1&aged_days=0) and optional pg_cron scheduling.
+
+--------------------------------------------------------------------------------
+USER:
+Ran /dcp (save chat, update as_built.txt, CLAUDE.md, .gitignore; no git commands).
+
+--------------------------------------------------------------------------------
+ASSISTANT:
+Created this chat-history file, as_built.txt, CLAUDE.md and .gitignore. No git
+commands were run.
+
+================================================================================
+END OF EXPORT
+================================================================================

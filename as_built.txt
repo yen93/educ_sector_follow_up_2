@@ -1,0 +1,44 @@
+================================================================================
+AS-BUILT — educ_sector_follow_up_2
+Last updated: 2026-11-16
+================================================================================
+
+SCRIPTS (Supabase edge functions, Deno; project MAGTestProject, ref aivitcomiywiysrfwqxt)
+- supabase/functions/educ-draft-followup-2/index.ts — DEPLOYED (v3, verify_jwt=false).
+  Selects manually_found_educ_leads WHERE status='2B' AND created_at <= now()-8 days,
+  drafts Follow-up 2 (chase2.ts, [firstname] filled, fallback "there") as an in-thread
+  reply (thread_id + In-Reply-To/References), sets status='3A' + draft_id (guarded by
+  status='2B'). Final step: calls educ-send-followup-2 (also when no 2B leads exist).
+  Params: ?token (required), ?dry=1, ?limit=n (default 200), ?aged_days=n (default 8).
+  Requires: secrets PUSH_SHARED_SECRET, GMAIL_OAUTH_CLIENT_ID/_SECRET/_REFRESH_TOKEN,
+  SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY (Supabase edge-function secrets).
+- supabase/functions/educ-send-followup-2/index.ts — DEPLOYED (v1, verify_jwt=false).
+  Selects status='3A' AND created_at <= now()-8 days, sends each stored draft_id via
+  drafts.send (in-thread), sets status='3B' and followup_2_date_sent=now() (guarded by
+  status='3A'). SENDS real email as james@. Same params/secrets as above.
+- supabase/functions/_shared/chase2.ts — GENERATED from chase_messages/followup_2.html
+  (Gmail wrapper stripped, JSON-encoded). Regenerate, don't hand-edit.
+- supabase/functions/_shared/gmail.ts, google-auth.ts, mime.ts — copied from
+  educ_sector_follow_up_sequence (profile, getThread, createDraft, sendDraft; OAuth
+  refresh-token auth; RFC822 HTML reply builder).
+- Neither function has been invoked yet; no cron/schedule exists for them.
+
+EXTERNAL INTEGRATIONS
+- Gmail API (gmail.googleapis.com, users/me as james@) — OAuth refresh token, stored
+  as Supabase edge-function secrets (not in repo).
+- Supabase (aivitcomiywiysrfwqxt) — functions deployed via Supabase MCP.
+
+DATA STORES
+- public.manually_found_educ_leads — leads; status flow here: 2B -> 3A (drafted,
+  draft_id set) -> 3B (sent, followup_2_date_sent set). 10A = bounced, 8A other.
+- public.educ_router_runs — per-run log (routers "draft-followup-2", "send-followup-2",
+  "(dry)" variants).
+
+AUTOMATIONS / ROUTINES
+- None scheduled for Follow-up 2 yet (follow-up 1 uses pg_cron weekdays 7am PHT in the
+  sibling project).
+
+OTHER
+- prompts/161126_create_followup_2_draft.txt, prompts/161126_send_followup_2.txt — task specs.
+- chase_messages/followup_2.html — email body source of truth.
+================================================================================
